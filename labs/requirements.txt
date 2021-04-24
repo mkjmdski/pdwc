@@ -1,0 +1,4 @@
+awscli==1.19.33
+boto3==1.17.33
+configparser==5.0.2
+awswrangler==2.7.0

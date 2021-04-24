@@ -1,0 +1,34 @@
+.git
+.idea
+.vscode
+*.pytest_cache*
+.coverage
+.env
+*.iml
+tests/reports*
+reports
+local_utils*
+
+### Vim ###
+# Swap
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+
+### macOS ###
+# General
+.DS_Store
+.AppleDouble
+.LSOverride
+
+### JupyterNotebooks ###
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+__pycache__
+
+### Terraform
+.terraform.lock.hcl
+.terraform
