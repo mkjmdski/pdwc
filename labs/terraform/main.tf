@@ -1,7 +1,7 @@
 locals {
   common_tags = {
-    Purpose = "UAM Cloud Data Processing"
-    Environment = "DEV"
-    Owner = var.student_full_name
+    purpose = "UAM Cloud Data Processing"
+    environment = "DEV"
+    owner = var.student_full_name
   }
 }
