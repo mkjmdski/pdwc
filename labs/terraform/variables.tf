@@ -29,3 +29,9 @@ variable "student_index_no" {
   description = "Index no"
   type = string
 }
+
+variable "lab_role_arn" {
+  description = "the role we use for all labs, dont use a single role for everything! it is an anti-pattern!!!!"
+  type = string
+
+}
