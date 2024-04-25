@@ -89,7 +89,7 @@ def prepare_event(event):
     return msg_formatted, msg_key
 
 
-def produce_data(kinesis_data_stream, messages_per_sec, input_file, singel_run):
+def produce_data(kinesis_data_stream, messages_per_sec, input_file, single_run):
     """
     Main method for producing
     :param kinesis_data_stream: param from cmdline name of KDS
@@ -119,7 +119,7 @@ def produce_data(kinesis_data_stream, messages_per_sec, input_file, singel_run):
             event, key = prepare_event(row)
             kp.produce(event, key, kinesis_data_stream)
 
-        if singel_run:
+        if single_run:
             break
         replay_cnt += 1
 
@@ -139,7 +139,7 @@ if __name__ == "__main__":
     kinesis_data_stream = args.kinesis_ds
     messages_per_sec = int(args.mps)
 
-    singel_run = args.singel_run if hasattr(args, 'singel_run') else False
+    single_run = args.singel_run if hasattr(args, 'singel_run') else False
 
     if args.input_file:
         input_file = args.input_file
@@ -147,4 +147,4 @@ if __name__ == "__main__":
         main_path = os.path.abspath(os.path.dirname(__file__))
         input_file = os.path.join(main_path, DEFAULT_DATA_FILE)
 
-    produce_data(kinesis_data_stream, messages_per_sec, input_file, singel_run)
+    produce_data(kinesis_data_stream, messages_per_sec, input_file, single_run)

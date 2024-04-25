@@ -7,7 +7,7 @@
 1. Wymagania wstępne - środowiska (rekomendowane **PyCharm + Anacoda**)
 * PyCharm - https://www.jetbrains.com/pycharm/download/
 * Anaconda - https://www.anaconda.com/products/individual#Downloads
-  - nowe środowisko Python 3.8  
+  - nowe środowisko Python 3.9 
     Windows users : użyj Anaconda Prompt)  
     Linux / MacOs bash / zsh etc..
     ```
