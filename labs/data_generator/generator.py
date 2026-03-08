@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-import configparser
 import argparse
-
 import csv
-import time
-import logging
-import sys
 import json
+import logging
 import os
+import random
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import boto3
 
@@ -18,7 +18,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DEFAULT_DATA_FILE = 'crypto_trades_20201001.csv'
+DEFAULT_DATA_FILE = 'trades.csv'
+DEFAULT_THREADS = 10
 
 
 class KinesisProducer:
@@ -31,19 +32,15 @@ class KinesisProducer:
         self.client = boto3.client('kinesis')
         self.max_retry_attempt = 5
 
-    def produce(self, event, key, data_stream):
+    def produce(self, event, key, data_stream, log_success=False):
         """
         A simple wrapper for put record
         :param event:
         :param key:
         :param data_stream:
+        :param log_success: if True, log each successful send (verbose)
         :return:
         """
-
-        # adding a new line at the end to produce JSON lines
-        # (otherwise we would need to pre-process those records in Firehose
-        # invoking a Lambda to add those new lines).Every message is a dumped json with \n
-
         tran_id = event["trans_id"]
         payload = (json.dumps(event) + '\n').encode('utf-8')
 
@@ -55,8 +52,9 @@ class KinesisProducer:
                     Data=payload,
                     PartitionKey=key
                 )
-                logger.info('Msg with trans_id={} sent to shard {} seq no {}'.format(tran_id, response["ShardId"],
-                                                                                     response["SequenceNumber"]))
+                if log_success:
+                    logger.info('Msg with trans_id={} sent to shard {} seq no {}'.format(
+                        tran_id, response["ShardId"], response["SequenceNumber"]))
                 return response
 
             except Exception as e:
@@ -89,57 +87,99 @@ def prepare_event(event):
     return msg_formatted, msg_key
 
 
-def produce_data(kinesis_data_stream, messages_per_sec, input_file, single_run):
-    """
-    Main method for producing
-    :param kinesis_data_stream: param from cmdline name of KDS
-    :param messages_per_sec: param from cmdline max speed per sec 1/mps
-    :return:
-    """
-    kp = KinesisProducer(speed_per_sec=messages_per_sec)
+def _send_chunk(args):
+    """Worker: send a chunk of rows to Kinesis. Returns (sent_count, error_count)."""
+    rows, data_stream = args
+    kp = KinesisProducer(speed_per_sec=-1)
+    sent, errors = 0, 0
+    for row in rows:
+        try:
+            event, key = prepare_event(row)
+            kp.produce(event, key, data_stream, log_success=False)
+            sent += 1
+        except Exception as e:
+            logger.warning('Failed to send trans_id={}: {}'.format(row.get("trans_id"), e))
+            errors += 1
+    return sent, errors
 
+
+def produce_data_parallel(kinesis_data_stream, input_file, num_transactions, num_threads):
+    """
+    Send transactions to Kinesis in parallel using multiple threads.
+    Suitable for Lambda: bounded workload, fast completion.
+    """
     with open(input_file) as csv_file:
         reader = csv.DictReader(csv_file, delimiter=',')
         all_rows = list(reader)
 
-    current_time = int(all_rows[0]["transaction_ts"])
+    if not all_rows:
+        logger.warning('CSV file is empty')
+        return
 
-    replay_cnt = 1
-    while True:
-        logger.info("start replaying for the {} time".format(replay_cnt))
-        for row in all_rows:
+    # Sample transactions randomly (with replacement, so we always get exactly num_transactions)
+    rows_to_send = random.choices(all_rows, k=num_transactions)
 
-            new_event_time = int(row["transaction_ts"])
-            time_delta = new_event_time - current_time
-            current_time = new_event_time
+    # Split into chunks for each thread
+    chunk_size = max(1, (len(rows_to_send) + num_threads - 1) // num_threads)
+    chunks = [
+        (rows_to_send[i:i + chunk_size], kinesis_data_stream)
+        for i in range(0, len(rows_to_send), chunk_size)
+    ]
 
-            if time_delta > 0 and messages_per_sec > 0:
-                time.sleep(time_delta / messages_per_sec)
+    logger.info('Sending {} transactions using {} threads ({} chunks)'.format(
+        len(rows_to_send), num_threads, len(chunks)))
 
-            event, key = prepare_event(row)
-            kp.produce(event, key, kinesis_data_stream)
+    start = time.time()
+    total_sent, total_errors = 0, 0
 
-        if single_run:
-            break
-        replay_cnt += 1
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        futures = [executor.submit(_send_chunk, chunk) for chunk in chunks]
+        for future in as_completed(futures):
+            sent, errors = future.result()
+            total_sent += sent
+            total_errors += errors
+
+    elapsed = time.time() - start
+    logger.info('Done: {} sent, {} errors in {:.2f}s ({:.0f} tx/s)'.format(
+        total_sent, total_errors, elapsed, total_sent / elapsed if elapsed > 0 else 0))
+
+
+def lambda_handler(event, context=None):
+    """
+    Lambda entry point. Expects event like:
+    {"transactions": 1000, "threads": 10, "kinesis_stream": "my-stream"}
+    kinesis_stream can also come from env KINESIS_STREAM_NAME.
+    """
+    num_transactions = int(event.get('transactions', 1000))
+    num_threads = int(event.get('threads', DEFAULT_THREADS))
+    kinesis_stream = event.get('kinesis_stream') or os.environ.get('KINESIS_STREAM_NAME')
+    if not kinesis_stream:
+        raise ValueError('kinesis_stream required in event or KINESIS_STREAM_NAME in env')
+
+    main_path = os.path.abspath(os.path.dirname(__file__))
+    input_file = os.path.join(main_path, DEFAULT_DATA_FILE)
+
+    produce_data_parallel(kinesis_stream, input_file, num_transactions, num_threads)
+    return {'statusCode': 200, 'body': {'transactions': num_transactions, 'threads': num_threads}}
 
 
 if __name__ == "__main__":
-    logger.info('Starting Simple Kinesis Producer (replaying stock data)')
+    logger.info('Starting Kinesis Producer (parallel mode)')
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-k', '--kinesis_ds', dest='kinesis_ds', required=True)
     parser.add_argument('-i', '--input_file', dest='input_file', required=False)
-    parser.add_argument('-s', '--messages_per_sec', dest='mps', type=int, default=-1, required=False)
-    parser.add_argument('-r', '--single-run', dest='singel_run', action='store_true', required=False, default=False)
+    parser.add_argument('-n', '--transactions', dest='transactions', type=int, required=True,
+                        help='Number of transactions to send')
 
-    args, unknown = parser.parse_known_args()
-    config = configparser.ConfigParser()
+    parser.add_argument('-t', '--threads', dest='threads', type=int, default=DEFAULT_THREADS,
+                        help='Number of worker threads (default: 10)')
+
+    args = parser.parse_args()
 
     kinesis_data_stream = args.kinesis_ds
-    messages_per_sec = int(args.mps)
-
-    single_run = args.singel_run if hasattr(args, 'singel_run') else False
+    num_transactions = args.transactions
+    num_threads = args.threads
 
     if args.input_file:
         input_file = args.input_file
@@ -147,4 +187,4 @@ if __name__ == "__main__":
         main_path = os.path.abspath(os.path.dirname(__file__))
         input_file = os.path.join(main_path, DEFAULT_DATA_FILE)
 
-    produce_data(kinesis_data_stream, messages_per_sec, input_file, single_run)
+    produce_data_parallel(kinesis_data_stream, input_file, num_transactions, num_threads)
