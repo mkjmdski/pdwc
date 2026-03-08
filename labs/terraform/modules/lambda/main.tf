@@ -37,7 +37,7 @@ resource "aws_lambda_function" "this" {
 
   logging_config {
     application_log_level = "INFO"
-    log_format           = "Text"
+    log_format            = "JSON"
   }
 }
 
