@@ -34,6 +34,11 @@ resource "aws_lambda_function" "this" {
       PYTHONUNBUFFERED = "1"
     })
   }
+
+  logging_config {
+    application_log_level = "INFO"
+    log_format           = "Text"
+  }
 }
 
 # -----------------------------------------------------------------------------
