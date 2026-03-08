@@ -32,3 +32,4 @@ __pycache__
 ### Terraform
 .terraform.lock.hcl
 .terraform
+labs/terraform/*.zip
