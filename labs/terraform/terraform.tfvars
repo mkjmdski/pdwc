@@ -1,5 +1,5 @@
-account_number=XXXXX
-student_initials="jk"
-student_full_name="Jakub Kasprzak"
-student_index_no = "12345"
-lab_role_arn = "arn:aws:iam::XXXXX:role/LabRole"
+account_number=74202832180
+student_initials="mm"
+student_full_name="Mikolaj Mlodzikowski"
+student_index_no = "s1203137"
+lab_role_arn = "arn:aws:iam::174202832180:role/LabRole"
