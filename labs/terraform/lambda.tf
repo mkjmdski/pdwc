@@ -27,6 +27,20 @@ data "archive_file" "data_reader" {
 }
 
 # -----------------------------------------------------------------------------
+# CloudWatch log groups for Lambda
+# -----------------------------------------------------------------------------
+
+resource "aws_cloudwatch_log_group" "data_generator" {
+  name              = "/aws/lambda/data-generator-${local.identifier}"
+  retention_in_days  = 7
+}
+
+resource "aws_cloudwatch_log_group" "data_reader" {
+  name              = "/aws/lambda/data-reader-${local.identifier}"
+  retention_in_days  = 7
+}
+
+# -----------------------------------------------------------------------------
 # Lambda functions (using var.lab_role_arn)
 # -----------------------------------------------------------------------------
 
