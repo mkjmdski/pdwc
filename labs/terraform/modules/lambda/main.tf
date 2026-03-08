@@ -28,11 +28,10 @@ resource "aws_lambda_function" "this" {
   runtime          = var.runtime
   timeout          = var.timeout
 
-  dynamic "environment" {
-    for_each = length(var.environment) > 0 ? [1] : []
-    content {
-      variables = var.environment
-    }
+  environment {
+    variables = merge(var.environment, {
+      PYTHONUNBUFFERED = "1"
+    })
   }
 }
 
