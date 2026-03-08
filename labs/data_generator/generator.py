@@ -164,12 +164,15 @@ def produce_data_parallel(kinesis_data_stream, input_file, num_transactions, num
 
 def lambda_handler(event, context=None):
     """
-    Lambda entry point. Expects event like:
-    {"transactions": 1000, "threads": 10, "kinesis_stream": "my-stream"}
-    kinesis_stream can also come from env KINESIS_STREAM_NAME.
+    Lambda entry point. Reads config from env: KINESIS_STREAM_NAME, GENERATOR_THREADS, GENERATOR_TRANSACTIONS.
+    Event can override: transactions, threads, kinesis_stream.
     """
-    num_transactions = int(event.get('transactions', 1000))
-    num_threads = int(event.get('threads', DEFAULT_THREADS))
+    num_transactions = int(
+        event.get('transactions') or os.environ.get('GENERATOR_TRANSACTIONS', 1000)
+    )
+    num_threads = int(
+        event.get('threads') or os.environ.get('GENERATOR_THREADS', DEFAULT_THREADS)
+    )
     kinesis_stream = event.get('kinesis_stream') or os.environ.get('KINESIS_STREAM_NAME')
     if not kinesis_stream:
         raise ValueError('kinesis_stream required in event or KINESIS_STREAM_NAME in env')

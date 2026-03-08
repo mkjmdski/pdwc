@@ -27,6 +27,7 @@ resource "aws_lambda_function" "this" {
   source_code_hash = data.archive_file.lambda.output_base64sha256
   runtime          = var.runtime
   timeout          = var.timeout
+  memory_size      = var.memory_size
 
   environment {
     variables = merge(var.environment, {

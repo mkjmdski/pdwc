@@ -15,10 +15,13 @@ module "lambda_data_generator" {
   ]
 
   environment = {
-    KINESIS_STREAM_NAME = aws_kinesis_stream.main.name
+    KINESIS_STREAM_NAME    = aws_kinesis_stream.main.name
+    GENERATOR_THREADS      = tostring(var.generator_threads)
+    GENERATOR_TRANSACTIONS = tostring(var.generator_transactions)
   }
 
-  timeout = 60
+  memory_size = 512
+  timeout     = 60
 }
 
 module "lambda_data_reader" {
@@ -77,20 +80,17 @@ resource "aws_lambda_event_source_mapping" "data_reader_kinesis" {
 }
 
 # -----------------------------------------------------------------------------
-# Invoke data_generator with 100 events in 10 threads, wait for result
+# Invoke data_generator
 # -----------------------------------------------------------------------------
 
 resource "aws_lambda_invocation" "data_generator" {
   function_name = module.lambda_data_generator.function_name
 
-  input = jsonencode({
-    transactions   = 100
-    threads        = 10
-    kinesis_stream = aws_kinesis_stream.main.name
-  })
+  input = jsonencode({})
 
   triggers = {
     redeployment = module.lambda_data_generator.source_code_hash
+    config       = "${var.generator_threads}-${var.generator_transactions}"
   }
 
   depends_on = [
@@ -116,7 +116,7 @@ resource "aws_lambda_invocation" "invalid_producer" {
 }
 
 output "data_generator_invocation_result" {
-  description = "Result of data_generator Lambda invocation (100 events, 10 threads)"
+  description = "Result of data_generator Lambda invocation"
   value       = jsondecode(aws_lambda_invocation.data_generator.result)
 }
 

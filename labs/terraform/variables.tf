@@ -33,5 +33,16 @@ variable "student_index_no" {
 variable "lab_role_arn" {
   description = "the role we use for all labs, dont use a single role for everything! it is an anti-pattern!!!!"
   type        = string
+}
 
+variable "generator_threads" {
+  description = "Number of threads for data_generator Lambda"
+  type        = number
+  default     = 25
+}
+
+variable "generator_transactions" {
+  description = "Number of transactions to send per data_generator invocation"
+  type        = number
+  default     = 100
 }

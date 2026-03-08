@@ -36,6 +36,12 @@ variable "timeout" {
   default     = 60
 }
 
+variable "memory_size" {
+  description = "Lambda memory in MB"
+  type        = number
+  default     = 128
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log group retention in days"
   type        = number
