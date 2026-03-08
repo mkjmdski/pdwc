@@ -1,75 +1,68 @@
 # -----------------------------------------------------------------------------
-# Lambda deployment packages
+# Lambda functions (using lambda module)
 # -----------------------------------------------------------------------------
 
-data "archive_file" "data_generator" {
-  type        = "zip"
-  output_path = "${path.module}/data_generator.zip"
+module "lambda_data_generator" {
+  source = "./modules/lambda"
 
-  source {
-    content  = file("${path.module}/../data_generator/generator.py")
-    filename = "generator.py"
-  }
-  source {
-    content  = file("${path.module}/../data_generator/trades.csv")
-    filename = "trades.csv"
-  }
-}
+  name     = "data-generator-${local.identifier}"
+  role_arn = var.lab_role_arn
+  handler  = "generator.lambda_handler"
 
-data "archive_file" "data_reader" {
-  type        = "zip"
-  output_path = "${path.module}/data_reader.zip"
+  source_files = [
+    "../data_generator/generator.py",
+    "../data_generator/trades.csv",
+  ]
 
-  source {
-    content  = file("${path.module}/../data_reader/reader.py")
-    filename = "reader.py"
-  }
-}
-
-# -----------------------------------------------------------------------------
-# CloudWatch log groups for Lambda
-# -----------------------------------------------------------------------------
-
-resource "aws_cloudwatch_log_group" "data_generator" {
-  name              = "/aws/lambda/data-generator-${local.identifier}"
-  retention_in_days  = 7
-}
-
-resource "aws_cloudwatch_log_group" "data_reader" {
-  name              = "/aws/lambda/data-reader-${local.identifier}"
-  retention_in_days  = 7
-}
-
-# -----------------------------------------------------------------------------
-# Lambda functions (using var.lab_role_arn)
-# -----------------------------------------------------------------------------
-
-resource "aws_lambda_function" "data_generator" {
-  filename         = data.archive_file.data_generator.output_path
-  function_name    = "data-generator-${local.identifier}"
-  role             = var.lab_role_arn
-  handler          = "generator.lambda_handler"
-  source_code_hash = data.archive_file.data_generator.output_base64sha256
-  runtime          = "python3.12"
-
-  environment {
-    variables = {
-      KINESIS_STREAM_NAME = aws_kinesis_stream.main.name
-    }
+  environment = {
+    KINESIS_STREAM_NAME = aws_kinesis_stream.main.name
   }
 
   timeout = 60
 }
 
-resource "aws_lambda_function" "data_reader" {
-  filename         = data.archive_file.data_reader.output_path
-  function_name    = "data-reader-${local.identifier}"
-  role             = var.lab_role_arn
-  handler          = "reader.lambda_handler"
-  source_code_hash = data.archive_file.data_reader.output_base64sha256
-  runtime          = "python3.12"
+module "lambda_data_reader" {
+  source = "./modules/lambda"
+
+  name     = "data-reader-${local.identifier}"
+  role_arn = var.lab_role_arn
+  handler  = "reader.lambda_handler"
+
+  source_files = [
+    "../data_reader/reader.py",
+  ]
+}
+
+module "lambda_firehose_validator" {
+  source = "./modules/lambda"
+
+  name     = "firehose-validator-${local.identifier}"
+  role_arn = var.lab_role_arn
+  handler  = "validator.lambda_handler"
+
+  source_files = [
+    "../data_validator/validator.py",
+  ]
 
   timeout = 60
+}
+
+module "lambda_invalid_producer" {
+  source = "./modules/lambda"
+
+  name     = "invalid-producer-${local.identifier}"
+  role_arn = var.lab_role_arn
+  handler  = "invalid_producer.lambda_handler"
+
+  source_files = [
+    "../data_generator/invalid_producer.py",
+  ]
+
+  environment = {
+    KINESIS_STREAM_NAME = aws_kinesis_stream.main.name
+  }
+
+  timeout = 30
 }
 
 # -----------------------------------------------------------------------------
@@ -78,7 +71,7 @@ resource "aws_lambda_function" "data_reader" {
 
 resource "aws_lambda_event_source_mapping" "data_reader_kinesis" {
   event_source_arn  = aws_kinesis_stream.main.arn
-  function_name     = aws_lambda_function.data_reader.arn
+  function_name     = module.lambda_data_reader.arn
   starting_position = "LATEST"
   batch_size        = 10
 }
@@ -88,7 +81,7 @@ resource "aws_lambda_event_source_mapping" "data_reader_kinesis" {
 # -----------------------------------------------------------------------------
 
 resource "aws_lambda_invocation" "data_generator" {
-  function_name = aws_lambda_function.data_generator.function_name
+  function_name = module.lambda_data_generator.function_name
 
   input = jsonencode({
     transactions   = 100
@@ -97,16 +90,37 @@ resource "aws_lambda_invocation" "data_generator" {
   })
 
   triggers = {
-    redeployment = data.archive_file.data_generator.output_base64sha256
+    redeployment = module.lambda_data_generator.source_code_hash
   }
 
   depends_on = [
-    aws_lambda_function.data_generator,
+    module.lambda_data_generator,
     aws_lambda_event_source_mapping.data_reader_kinesis
+  ]
+}
+
+resource "aws_lambda_invocation" "invalid_producer" {
+  function_name = module.lambda_invalid_producer.function_name
+
+  input = jsonencode({
+    kinesis_stream = aws_kinesis_stream.main.name
+  })
+
+  triggers = {
+    redeployment = module.lambda_invalid_producer.source_code_hash
+  }
+
+  depends_on = [
+    aws_lambda_invocation.data_generator
   ]
 }
 
 output "data_generator_invocation_result" {
   description = "Result of data_generator Lambda invocation (100 events, 10 threads)"
   value       = jsondecode(aws_lambda_invocation.data_generator.result)
+}
+
+output "invalid_producer_invocation_result" {
+  description = "Result of invalid_producer Lambda (5 invalid messages sent to test validator)"
+  value       = jsondecode(aws_lambda_invocation.invalid_producer.result)
 }
