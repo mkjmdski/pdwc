@@ -47,3 +47,9 @@ variable "log_retention_days" {
   type        = number
   default     = 7
 }
+
+variable "layers" {
+  description = "List of Lambda layer ARNs to attach"
+  type        = list(string)
+  default     = []
+}

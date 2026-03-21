@@ -83,6 +83,14 @@ resource "aws_cloudwatch_event_target" "data_generator" {
   role_arn = var.lab_role_arn
 }
 
+resource "aws_lambda_permission" "allow_eventbridge_data_generator" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = module.lambda_data_generator.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.data_generator_schedule.arn
+}
+
 # -----------------------------------------------------------------------------
 # Kinesis event source mapping - data_reader consumes from Kinesis
 # -----------------------------------------------------------------------------
@@ -139,3 +147,55 @@ resource "aws_lambda_invocation" "data_generator" {
 #   description = "Result of invalid_producer Lambda (5 invalid messages sent to test validator)"
 #   value       = jsondecode(aws_lambda_invocation.invalid_producer.result)
 # }
+
+# -----------------------------------------------------------------------------
+# ETL post-processing: raw JSON → Parquet in processed zone
+# -----------------------------------------------------------------------------
+
+resource "aws_lambda_layer_version" "aws_wrangler" {
+  filename            = "../lambda/awswrangler-layer-2.7.0-py3.8.zip"
+  layer_name          = "aws_wrangler_${var.account_number}_${var.student_initials}_${var.student_index_no}"
+  source_code_hash    = filebase64sha256("../lambda/awswrangler-layer-2.7.0-py3.8.zip")
+  compatible_runtimes = ["python3.8"]
+}
+
+module "lambda_etl_post_processing" {
+  source = "./modules/lambda"
+
+  name     = "etl-post-processing-${var.account_number}-${var.student_initials}-${var.student_index_no}"
+  role_arn = var.lab_role_arn
+  handler  = "lambda_definition.etl_function"
+  runtime  = "python3.8"
+
+  source_files = [
+    "../lambda/lambda_definition.py",
+  ]
+
+  layers = [aws_lambda_layer_version.aws_wrangler.arn]
+
+  environment = {
+    PROCESSED_BUCKET_SSM_PARAM = aws_ssm_parameter.processed_bucket.name
+  }
+
+  memory_size = 512
+  timeout     = 300
+}
+
+resource "aws_lambda_permission" "allow_bucket" {
+  statement_id  = "AllowExecutionFromS3Bucket"
+  action        = "lambda:InvokeFunction"
+  function_name = module.lambda_etl_post_processing.arn
+  principal     = "s3.amazonaws.com"
+  source_arn    = aws_s3_bucket.landings["raw"].arn
+}
+
+resource "aws_s3_bucket_notification" "trigger_etl_lambda" {
+  bucket = aws_s3_bucket.landings["raw"].id
+
+  lambda_function {
+    lambda_function_arn = module.lambda_etl_post_processing.arn
+    events              = ["s3:ObjectCreated:*"]
+  }
+
+  depends_on = [aws_lambda_permission.allow_bucket]
+}

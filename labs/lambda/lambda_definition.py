@@ -1,10 +1,15 @@
+import os
 import urllib.parse
+import boto3
 import awswrangler as wr
 import pandas as pd
 
+ssm = boto3.client("ssm")
+
 
 def etl_function(event, context):
-    processed_zone_prefix = "processed-zone"
+    param_name = os.environ["PROCESSED_BUCKET_SSM_PARAM"]
+    processed_bucket = ssm.get_parameter(Name=param_name)["Parameter"]["Value"]
 
     record = event["Records"][0]
     bucket = record["s3"]["bucket"]["name"]
@@ -16,7 +21,7 @@ def etl_function(event, context):
     df = wr.s3.read_json(path=full_src_path, lines=True)
 
     filename = key.split('/')[-1][-36:]
-    dest_prefix = f"s3://{bucket}/{processed_zone_prefix}/{event_prefix}"
+    dest_prefix = f"s3://{processed_bucket}/{event_prefix}"
 
     df['transaction_date'] = pd.to_datetime(df['transaction_ts'], unit='s')
     df['year'] = df['transaction_date'].dt.year
