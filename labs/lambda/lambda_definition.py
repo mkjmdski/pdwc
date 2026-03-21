@@ -14,14 +14,13 @@ def etl_function(event, context):
     record = event["Records"][0]
     bucket = record["s3"]["bucket"]["name"]
     key = urllib.parse.unquote(record["s3"]["object"]["key"])
-    event_prefix = key.split('/')[1]
     full_src_path = 's3://{bucket}/{key}'.format(bucket=bucket, key=key)
 
     print(f'Processing key = {full_src_path}')
     df = wr.s3.read_json(path=full_src_path, lines=True)
 
     filename = key.split('/')[-1][-36:]
-    dest_prefix = f"s3://{processed_bucket}/{event_prefix}"
+    dest_prefix = f"s3://{processed_bucket}"
 
     df['transaction_date'] = pd.to_datetime(df['transaction_ts'], unit='s')
     df['year'] = df['transaction_date'].dt.year
