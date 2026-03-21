@@ -69,6 +69,21 @@ module "lambda_invalid_producer" {
 }
 
 # -----------------------------------------------------------------------------
+# EventBridge schedule - run data_generator every 1 minute
+# -----------------------------------------------------------------------------
+
+resource "aws_cloudwatch_event_rule" "data_generator_schedule" {
+  name                = "data-generator-schedule-${local.identifier}"
+  schedule_expression = "rate(1 minute)"
+}
+
+resource "aws_cloudwatch_event_target" "data_generator" {
+  rule     = aws_cloudwatch_event_rule.data_generator_schedule.name
+  arn      = module.lambda_data_generator.arn
+  role_arn = var.lab_role_arn
+}
+
+# -----------------------------------------------------------------------------
 # Kinesis event source mapping - data_reader consumes from Kinesis
 # -----------------------------------------------------------------------------
 
@@ -115,12 +130,12 @@ resource "aws_lambda_invocation" "invalid_producer" {
   ]
 }
 
-output "data_generator_invocation_result" {
-  description = "Result of data_generator Lambda invocation"
-  value       = jsondecode(aws_lambda_invocation.data_generator.result)
-}
+# output "data_generator_invocation_result" {
+#   description = "Result of data_generator Lambda invocation"
+#   value       = jsondecode(aws_lambda_invocation.data_generator.result)
+# }
 
-output "invalid_producer_invocation_result" {
-  description = "Result of invalid_producer Lambda (5 invalid messages sent to test validator)"
-  value       = jsondecode(aws_lambda_invocation.invalid_producer.result)
-}
+# output "invalid_producer_invocation_result" {
+#   description = "Result of invalid_producer Lambda (5 invalid messages sent to test validator)"
+#   value       = jsondecode(aws_lambda_invocation.invalid_producer.result)
+# }
