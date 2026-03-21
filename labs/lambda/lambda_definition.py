@@ -22,11 +22,12 @@ def etl_function(event, context):
     filename = key.split('/')[-1][-36:]
     dest_prefix = f"s3://{processed_bucket}"
 
-    df['transaction_date'] = pd.to_datetime(df['transaction_ts'], unit='s')
-    df['year'] = df['transaction_date'].dt.year
-    df['month'] = df['transaction_date'].dt.month
-    df['day'] = df['transaction_date'].dt.day
-    df['hour'] = df['transaction_date'].dt.hour
+    ts = pd.to_datetime(df['transaction_ts'], unit='s')
+    df['transaction_date'] = ts.dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+    df['year'] = ts.dt.year
+    df['month'] = ts.dt.month
+    df['day'] = ts.dt.day
+    df['hour'] = ts.dt.hour
 
     cols_to_return = ["transaction_date", "price", "amount", "dollar_amount", "type", "trans_id"]
 
