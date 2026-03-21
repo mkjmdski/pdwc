@@ -50,23 +50,23 @@ module "lambda_firehose_validator" {
   timeout = 60
 }
 
-module "lambda_invalid_producer" {
-  source = "./modules/lambda"
+# module "lambda_invalid_producer" {
+#   source = "./modules/lambda"
 
-  name     = "invalid-producer-${local.identifier}"
-  role_arn = var.lab_role_arn
-  handler  = "invalid_producer.lambda_handler"
+#   name     = "invalid-producer-${local.identifier}"
+#   role_arn = var.lab_role_arn
+#   handler  = "invalid_producer.lambda_handler"
 
-  source_files = [
-    "../data_generator/invalid_producer.py",
-  ]
+#   source_files = [
+#     "../data_generator/invalid_producer.py",
+#   ]
 
-  environment = {
-    KINESIS_STREAM_NAME = aws_kinesis_stream.main.name
-  }
+#   environment = {
+#     KINESIS_STREAM_NAME = aws_kinesis_stream.main.name
+#   }
 
-  timeout = 30
-}
+#   timeout = 30
+# }
 
 # -----------------------------------------------------------------------------
 # EventBridge schedule - run data_generator every 1 minute
@@ -114,21 +114,21 @@ resource "aws_lambda_invocation" "data_generator" {
   ]
 }
 
-resource "aws_lambda_invocation" "invalid_producer" {
-  function_name = module.lambda_invalid_producer.function_name
+# resource "aws_lambda_invocation" "invalid_producer" {
+#   function_name = module.lambda_invalid_producer.function_name
 
-  input = jsonencode({
-    kinesis_stream = aws_kinesis_stream.main.name
-  })
+#   input = jsonencode({
+#     kinesis_stream = aws_kinesis_stream.main.name
+#   })
 
-  triggers = {
-    redeployment = module.lambda_invalid_producer.source_code_hash
-  }
+#   triggers = {
+#     redeployment = module.lambda_invalid_producer.source_code_hash
+#   }
 
-  depends_on = [
-    aws_lambda_invocation.data_generator
-  ]
-}
+#   depends_on = [
+#     aws_lambda_invocation.data_generator
+#   ]
+# }
 
 # output "data_generator_invocation_result" {
 #   description = "Result of data_generator Lambda invocation"
